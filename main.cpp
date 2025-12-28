@@ -18,7 +18,15 @@ int checkWinner(int a[9], int m[8][3]) {
 
 int main() {
     if (glfwInit() == false) return -1;
-    GLFWwindow* window = glfwCreateWindow(600, 600, GAME_TITLE, NULL, NULL);
+    // 1. Set the initial size (Width, Height)
+    GLFWwindow* window = glfwCreateWindow(450, 600, GAME_TITLE, NULL, NULL);
+
+    // 2. To prevent the user from dragging the edges and breaking your layout:
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); 
+
+    // 3. If you want to change the size AFTER the window is already open:
+    glfwSetWindowSize(window, 500, 700);
+
     if (window == NULL) { glfwTerminate(); return -1; }
 
     glfwMakeContextCurrent(window);
@@ -56,9 +64,20 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
 
-        ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_Always);
-        ImGui::Begin("Game Board", nullptr, ImGuiWindowFlags_NoResize);
+        // Forces the ImGui window to cover the entire GLFW window
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2((float)display_w, (float)display_h));
+
+        // Use these flags to hide the title bar and background for a "seamless" look
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | 
+                                ImGuiWindowFlags_NoResize | 
+                                ImGuiWindowFlags_NoMove | 
+                                ImGuiWindowFlags_NoCollapse;
+
+        ImGui::Begin("Game Board", nullptr, flags);
 
         int ret = checkWinner(board, winCondition);
 
