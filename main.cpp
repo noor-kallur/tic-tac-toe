@@ -1,168 +1,147 @@
-#include "imgui.h"              // The core ImGui logic
-#include "imgui_impl_glfw.h"    // ImGui talking to the window
-#include "imgui_impl_opengl3.h" // ImGui talking to the graphics card
-#include <GLFW/glfw3.h>         // The actual window creator
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include <GLFW/glfw3.h>
 #include <queue>
-
 #include <iostream>
-#define GAME_TITLE "Tic Tac Toe"
+#include <cmath> // For sinf
 
-int checkWinner(int a[9], int m[8][3]){
-    for(int i = 0; i < 8; i++)
-    {
-        if ( (a[m[i][0]] != 0) &&
-            (a[m[i][0]] == a[m[i][1]]) &&
-            (a[m[i][0]] == a[m[i][2]]) )
-        {
+#define GAME_TITLE "Tic Tac Toe - Smooth"
+
+int checkWinner(int a[9], int m[8][3]) {
+    for (int i = 0; i < 8; i++) {
+        if ((a[m[i][0]] != 0) && (a[m[i][0]] == a[m[i][1]]) && (a[m[i][0]] == a[m[i][2]]))
             return a[m[i][0]];
-        }
-        
     }
     return 0;
-
 }
-int main()
-{
-    if(glfwInit() == false) return -1;
 
-    GLFWwindow* window = glfwCreateWindow(600, 500, GAME_TITLE, NULL, NULL);
+int main() {
+    if (glfwInit() == false) return -1;
+    GLFWwindow* window = glfwCreateWindow(600, 600, GAME_TITLE, NULL, NULL);
+    if (window == NULL) { glfwTerminate(); return -1; }
 
-    if(window == NULL){
-        std::cout<<"Failed to crate a window"<<std::endl;
-        glfwTerminate();
-        return -1;
-    }
-
-    // connecting the window to GUI
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // cap it at 60 FPS
+    glfwSwapInterval(1);
 
-    // init imgui
     ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    
+    // --- STEP 1: FIX PIXELATION ---
+    // Load a real font. Change the path to a valid .ttf on your Linux system.
+    // Standard Arch/Ubuntu path example:
+    ImFont* mainFont = io.Fonts->AddFontFromFileTTF("../fonts/AdwaitaMono-Bold.ttf", 20.0f);
+    if(mainFont == nullptr){
+        std::cout<<"Font Failed"<<std::endl;
+    }
+    if (!mainFont) mainFont = io.Fonts->AddFontDefault(); 
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
 
     bool turn = false;
-    int board[9]= {0};
-    std::queue<int> x_q;
-    std::queue<int> o_q;
+    int board[9] = {0};
+    
+    // --- STEP 2: ANIMATION STATE ---
+    float opacities[9] = {0.0f}; // Stores 0.0 (invisible) to 1.0 (fully drawn)
+    float animSpeed = 5.0f;      // How fast the fade happens
+    
+    std::queue<int> x_q, o_q;
+    int winCondition[8][3] = { {0,1,2},{3,4,5},{6,7,8},{0,3,6},{1,4,7},{2,5,8},{0,4,8},{2,4,6} };
 
-
-    int winCondition[8][3] = {
-        {0, 1, 2}, {3, 4, 5}, {6, 7, 8}, // Horizontals
-        {0, 3, 6}, {1, 4, 7}, {2, 5, 8}, // Verticals
-        {0, 4, 8}, {2, 4, 6}             // Diagonals
-    };
-    while (!glfwWindowShouldClose(window))
-    {
+    while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        float dt = io.DeltaTime; // Time elapsed since last frame
 
-        // 1. START THE FRAME (Must happen before ANY ImGui calls)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // 2. DEFINE THE UI
-        ImGui::SetNextWindowSize(ImVec2(350, 480), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Game Board");
+        ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_Always);
+        ImGui::Begin("Game Board", nullptr, ImGuiWindowFlags_NoResize);
 
         int ret = checkWinner(board, winCondition);
 
-        if (ret != 0) {
-            ImGui::SetWindowFontScale(2.0f);
-            ImGui::Text("Player %s Won!", (ret == 1 ? "X" : "O"));
-            ImGui::SetWindowFontScale(1.0f);
-
-            if (ImGui::Button("Play Again?")) {
-                for (int i = 0; i < 9; i++) board[i] = 0; // Fixed: i < 9
-                turn = false;
+        // --- STEP 3: UPDATE OPACITIES (Lerping) ---
+        for (int i = 0; i < 9; i++) {
+            if (board[i] != 0) {
+                if (opacities[i] < 1.0f) opacities[i] += dt * animSpeed;
+            } else {
+                if (opacities[i] > 0.0f) opacities[i] -= dt * animSpeed;
             }
         }
-        else {
-    
+
+        if (ret != 0) {
+            ImGui::Text("Player %s Won!", (ret == 1 ? "X" : "O"));
+            if (ImGui::Button("Reset Game")) {
+                for (int i = 0; i < 9; i++) board[i] = 0;
+                while(!x_q.empty()) x_q.pop();
+                while(!o_q.empty()) o_q.pop();
+            }
+        } else {
             ImGui::Text("Turn: Player %s", (turn ? "X" : "O"));
         }
 
         ImGui::Separator();
         
-        // Draw the 3x3 Grid
-        ImGui::SetWindowFontScale(3.0f);
-        for (int i = 0; i < 9; i++) { // Fixed: i < 9
-            const char* label = " ";
-            ImVec4 textColor = ImVec4(1, 1, 1, 1);
+        // Pulse logic for the expiring piece
+        float pulse = (sinf((float)ImGui::GetTime() * 6.0f) * 0.2f) + 0.7f;
 
-            if (board[i] == 1) {
-                label = "X";
-                textColor = ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
-            } else if (board[i] == 2) {
-                label = "O";
-                textColor = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
-            }
+        ImGui::PushFont(mainFont); // Switch to the high-quality font
+        for (int i = 0; i < 9; i++) {
+            const char* label = (board[i] == 1) ? "X" : (board[i] == 2) ? "O" : " ";
+            
+            // --- STEP 4: COLOR & ALPHA INTERPOLATION ---
+            ImVec4 color = (board[i] == 1) ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f) : ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
+            float alpha = opacities[i];
 
-            char buttonId[32];
-            sprintf(buttonId, "%s###btn%d", label, i);
-            // Only allow moves if the square is empty and no one has won yet
-            if (board[i] == 1 && x_q.size() == 3 && x_q.front() == i) {
-                textColor = ImVec4(1.0f, 0.5f, 0.5f, 0.5f); // Dim red for X
-            } 
-            else if (board[i] == 2 && o_q.size() == 3 && o_q.front() == i) {
-                textColor = ImVec4(0.5f, 0.8f, 1.0f, 0.5f); // Dim blue for O
-            }
-            ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-            if (ImGui::Button(buttonId, ImVec2(100, 100))) {
+            // Check if this is the oldest piece (next to vanish)
+            bool isOldest = (board[i] == 1 && x_q.size() == 3 && x_q.front() == i) || 
+                            (board[i] == 2 && o_q.size() == 3 && o_q.front() == i);
+            
+            if (isOldest) alpha *= pulse; // Apply pulse to alpha
 
+            color.w = alpha; // Apply final animated alpha to color
+
+            char buttonId[16];
+            sprintf(buttonId, "###btn%d", i);
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            if (ImGui::Button(buttonId, ImVec2(110, 110))) {
                 if (board[i] == 0 && ret == 0) {
-                    if(turn==true)
-                    {
-                        board[i]=1;
-                        x_q.push(i);
-                        // delete the last x or o
-                        if(x_q.size() > 3)
-                        {
-                            std::cout<<"x pop"<<std::endl;
-                            board[x_q.front()] = 0;
-                            x_q.pop();
-                        }
-                    }
-                    else if(turn==false){
-                        board[i]=2;
-                        o_q.push(i);
-                        if(o_q.size() > 3)
-                        {
-                            std::cout<<"o pop"<<std::endl;
-                            board[o_q.front()] = 0;
-                            o_q.pop();
-                        }
-                    }
+                    if (turn) { board[i] = 1; x_q.push(i); if (x_q.size() > 3) { board[x_q.front()] = 0; x_q.pop(); } }
+                    else      { board[i] = 2; o_q.push(i); if (o_q.size() > 3) { board[o_q.front()] = 0; o_q.pop(); } }
                     turn = !turn;
                 }
             }
+            
+            // Re-render label on top of button for better centering control
+            // (Button text can sometimes be offset at large scales)
+            ImVec2 pos = ImGui::GetItemRectMin();
+            ImVec2 size = ImGui::GetItemRectSize();
+            ImGui::GetWindowDrawList()->AddText(mainFont, 70.0f, 
+                ImVec2(pos.x + (size.x/2) - 20, pos.y + (size.y/2) - 35), 
+                ImColor(color), label);
+
             ImGui::PopStyleColor();
 
-            // Wrap to new line every 3 buttons
-            if ((i + 1) % 3 != 0) {
-                ImGui::SameLine();
-            }
+            if ((i + 1) % 3 != 0) ImGui::SameLine();
         }
-        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopFont();
         ImGui::End();
 
-        // 3. RENDERING
+        // --- RENDER ---
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        
         glfwSwapBuffers(window);
     }
-        
+
+    // Cleanup...
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-
-    glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
-
 }
