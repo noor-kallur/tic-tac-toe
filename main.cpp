@@ -111,7 +111,7 @@ int main() {
             const char* label = (board[i] == 1) ? "X" : (board[i] == 2) ? "O" : " ";
             
             // --- STEP 4: COLOR & ALPHA INTERPOLATION ---
-            ImVec4 color = (board[i] == 1) ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f) : ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
+            ImVec4 color = (board[i] == 1) ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f) : ImVec4(0.0f, 1.0f, 0.0f, 1.0f);;
             float alpha = opacities[i];
 
             // Check if this is the oldest piece (next to vanish)
